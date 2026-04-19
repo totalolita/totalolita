@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebGIS BTS Riau — Sistem Informasi Persebaran BTS</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>" />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <!-- Leaflet Markercluster -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:    #0B2341;
+      --blue:    #1565C0;
+      --cyan:    #0097A7;
+      --teal:    #00796B;
+      --accent:  #00E5FF;
+      --orange:  #FF6D00;
+      --green:   #00C853;
+      --purple:  #7C4DFF;
+      --white:   #FFFFFF;
+      --light:   #E3F2FD;
+      --lgray:   #ECEFF1;
+      --gray:    #546E7A;
+      --dark:    #0a1628;
+      --glass:   rgba(11,35,65,0.85);
+      --sidebar: 320px;
+      --header:  56px;
+    }
+
+    html, body { height: 100%; overflow: hidden; font-family: 'DM Sans', sans-serif; background: var(--dark); color: var(--white); }
+
+    /* ===== LAYOUT ===== */
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ===== HEADER ===== */
+    #header {
+      height: var(--header);
+      background: var(--navy);
+      border-bottom: 1px solid rgba(0,229,255,0.2);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .logo-icon { font-size: 20px; }
+    .logo-sep { color: rgba(255,255,255,0.2); font-size: 18px; margin: 0 4px; }
+    .logo-sub { color: rgba(255,255,255,0.5); font-size: 11px; font-family: 'DM Sans', sans-serif; font-weight: 400; }
+
+    .header-search {
+      flex: 1; max-width: 340px; margin-left: auto;
+      position: relative;
+    }
+    .header-search input {
+      width: 100%; padding: 7px 14px 7px 36px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 8px; color: var(--white);
+      font-size: 13px; font-family: 'DM Sans', sans-serif;
+      outline: none; transition: border 0.2s;
+    }
+    .header-search input:focus { border-color: var(--accent); }
+    .header-search input::placeholder { color: rgba(255,255,255,0.35); }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.5; font-size: 14px; }
+
+    .header-stats {
+      display: flex; gap: 6px; margin-left: 12px;
+    }
+    .hstat {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; padding: 4px 10px;
+      text-align: center; white-space: nowrap;
+    }
+    .hstat-num { font-size: 14px; font-weight: 700; color: var(--accent); display: block; line-height: 1.2; }
+    .hstat-lbl { font-size: 9px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ===== MAIN CONTENT ===== */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ===== SIDEBAR ===== */
+    #sidebar {
+      width: var(--sidebar);
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid rgba(0,229,255,0.12);
+      display: flex; flex-direction: column;
+      overflow: hidden; flex-shrink: 0;
+      z-index: 500;
+    }
+
+    .sidebar-tabs {
+      display: flex; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .stab {
+      flex: 1; padding: 11px 0;
+      background: none; border: none; color: rgba(255,255,255,0.45);
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.6px; cursor: pointer; transition: all 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .stab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+    .stab:hover:not(.active) { color: rgba(255,255,255,0.7); }
+
+    .tab-panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+    .tab-panel.active { display: flex; }
+
+    /* scrollbar */
+    .tab-panel::-webkit-scrollbar { width: 4px; }
+    .tab-panel::-webkit-scrollbar-track { background: transparent; }
+    .tab-panel::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.3); border-radius: 4px; }
+
+    /* ===== FILTER PANEL ===== */
+    .filter-section { padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .filter-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+
+    .chip-group { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip {
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      border: 1.5px solid rgba(255,255,255,0.15); background: transparent;
+      color: rgba(255,255,255,0.6); cursor: pointer; transition: all 0.18s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: var(--navy); }
+    .chip.op-tsel.active { background: #FF0000; border-color: #FF0000; color: #fff; }
+    .chip.op-isat.active { background: #FFB300; border-color: #FFB300; color: #fff; }
+    .chip.op-xl.active   { background: #1565C0; border-color: #1565C0; color: #fff; }
+    .chip.op-tri.active  { background: #7C4DFF; border-color: #7C4DFF; color: #fff; }
+    .chip.net-2g.active  { background: #546E7A; border-color: #546E7A; color: #fff; }
+    .chip.net-3g.active  { background: var(--teal); border-color: var(--teal); color: #fff; }
+    .chip.net-4g.active  { background: var(--cyan); border-color: var(--cyan); color: #fff; }
+    .chip.net-5g.active  { background: var(--green); border-color: var(--green); color: #fff; }
+
+    .filter-reset {
+      width: 100%; margin-top: 10px; padding: 8px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; color: rgba(255,255,255,0.5); font-size: 12px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s;
+    }
+    .filter-reset:hover { background: rgba(255,0,0,0.1); border-color: #ff4444; color: #ff4444; }
+
+    /* ===== BTS LIST ===== */
+    .bts-count { padding: 10px 14px 6px; font-size: 11px; color: rgba(255,255,255,0.4); }
+    .bts-count span { color: var(--accent); font-weight: 700; }
+
+    .bts-item {
+      padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer; transition: background 0.15s;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .bts-item:hover { background: rgba(0,229,255,0.06); }
+    .bts-item.selected { background: rgba(0,229,255,0.1); border-left: 3px solid var(--accent); }
+
+    .bts-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .bts-info { flex: 1; min-width: 0; }
+    .bts-name { font-size: 12px; font-weight: 600; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bts-meta { font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 2px; }
+
+    .bts-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      color: #fff; flex-shrink: 0;
+    }
+
+    /* ===== STATS PANEL ===== */
+    .stats-block { padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .stats-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); margin-bottom: 10px; }
+
+    .stat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .stat-row-label { font-size: 11px; color: rgba(255,255,255,0.6); flex: 1; }
+    .stat-bar-wrap { flex: 2; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .stat-bar { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+    .stat-row-val { font-size: 11px; font-weight: 700; color: var(--white); min-width: 28px; text-align: right; }
+
+    .big-stat { text-align: center; padding: 10px 0; }
+    .big-stat-num { font-size: 36px; font-weight: 700; color: var(--accent); font-family: 'Space Mono', monospace; line-height: 1; }
+    .big-stat-lbl { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 4px; }
+
+    /* ===== MAP ===== */
+    #map { flex: 1; z-index: 1; }
+
+    /* Leaflet overrides */
+    .leaflet-popup-content-wrapper {
+      background: var(--navy) !important;
+      border: 1px solid rgba(0,229,255,0.3) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+      color: var(--white) !important;
+    }
+    .leaflet-popup-tip { background: var(--navy) !important; }
+    .leaflet-popup-close-button { color: rgba(255,255,255,0.5) !important; font-size: 18px !important; }
+    .leaflet-control-zoom a {
+      background: var(--navy) !important;
+      color: var(--white) !important;
+      border-color: rgba(255,255,255,0.1) !important;
+    }
+    .leaflet-control-zoom a:hover { background: var(--blue) !important; }
+    .leaflet-control-attribution { display: none; }
+
+    /* ===== POPUP CONTENT ===== */
+    .popup-wrap { min-width: 220px; }
+    .popup-header {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 10px; margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .popup-icon { font-size: 24px; }
+    .popup-name { font-size: 14px; font-weight: 700; color: var(--white); }
+    .popup-op { font-size: 11px; margin-top: 2px; }
+    .popup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .popup-field { background: rgba(255,255,255,0.06); border-radius: 6px; padding: 6px 8px; }
+    .popup-field-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.4); }
+    .popup-field-val { font-size: 12px; font-weight: 600; color: var(--white); margin-top: 2px; }
+    .popup-status { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; background: rgba(0,200,83,0.2); color: var(--green); border: 1px solid var(--green); }
+
+    /* ===== LAYER CONTROL ===== */
+    #layer-control {
+      position: absolute; top: calc(var(--header) + 12px); right: 12px;
+      z-index: 800; background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,229,255,0.15);
+      border-radius: 12px; padding: 12px; min-width: 160px;
+    }
+    .lc-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); margin-bottom: 8px; }
+    .lc-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; }
+    .lc-item label { font-size: 12px; color: rgba(255,255,255,0.7); cursor: pointer; }
+    .lc-item input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+
+    /* ===== BOTTOM INFO BAR ===== */
+    #info-bar {
+      position: absolute; bottom: 0; left: var(--sidebar); right: 0;
+      height: 28px; z-index: 700;
+      background: rgba(11,35,65,0.9); backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(0,229,255,0.1);
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 14px; font-size: 10px; color: rgba(255,255,255,0.4);
+    }
+    #info-bar span { display: flex; align-items: center; gap: 4px; }
+
+    /* ===== LEGEND ===== */
+    #legend {
+      position: absolute; bottom: 36px; right: 12px;
+      z-index: 800; background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,229,255,0.15);
+      border-radius: 12px; padding: 10px 14px;
+    }
+    .leg-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); margin-bottom: 8px; }
+    .leg-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 11px; color: rgba(255,255,255,0.7); }
+    .leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ===== LOADING ===== */
+    #loading {
+      position: fixed; inset: 0; background: var(--dark);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; flex-direction: column; gap: 16px;
+      transition: opacity 0.4s;
+    }
+    .loading-logo { font-size: 48px; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.9)} }
+    .loading-text { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--accent); letter-spacing: 1px; }
+    .loading-bar { width: 200px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+    .loading-fill { height: 100%; background: var(--accent); border-radius: 2px; animation: load 1.8s ease-in-out infinite; }
+    @keyframes load { 0%{width:0%} 60%{width:80%} 100%{width:100%} }
+
+    /* ===== NOTIFICATION ===== */
+    #notif {
+      position: absolute; top: calc(var(--header) + 12px); left: 50%;
+      transform: translateX(-50%); z-index: 900;
+      background: var(--navy); border: 1px solid var(--accent);
+      border-radius: 8px; padding: 8px 16px; font-size: 12px;
+      color: var(--accent); display: none; white-space: nowrap;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 700px) {
+      :root { --sidebar: 100%; --header: 50px; }
+      #sidebar { position: absolute; bottom: 0; left: 0; width: 100%; height: 45vh; z-index: 600; border-right: none; border-top: 1px solid rgba(0,229,255,0.2); }
+      #main { flex-direction: column-reverse; }
+      #map { flex: none; height: 55vh; }
+      #layer-control { top: calc(var(--header) + 8px); right: 8px; padding: 8px; min-width: 130px; }
+      #legend { bottom: calc(45vh + 36px); }
+      #info-bar { left: 0; }
+      .header-stats { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading">
+  <div class="loading-logo">📡</div>
+  <div class="loading-text">MEMUAT WebGIS BTS RIAU...</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <!-- Header -->
+  <header id="header">
+    <div class="logo">
+      <span class="logo-icon">🌐</span>
+      WebGIS BTS RIAU
+      <span class="logo-sep">|</span>
+      <span class="logo-sub">Sistem Informasi Persebaran BTS</span>
+    </div>
+    <div class="header-search">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Cari nama BTS atau lokasi..." />
+    </div>
+    <div class="header-stats">
+      <div class="hstat"><span class="hstat-num" id="hs-total">25</span><span class="hstat-lbl">Total BTS</span></div>
+      <div class="hstat"><span class="hstat-num" id="hs-showing">25</span><span class="hstat-lbl">Ditampilkan</span></div>
+      <div class="hstat"><span class="hstat-num">4G</span><span class="hstat-lbl">Dominan</span></div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div id="main">
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="sidebar-tabs">
+        <button class="stab active" data-tab="filter">⚙ Filter</button>
+        <button class="stab" data-tab="list">📋 Daftar</button>
+        <button class="stab" data-tab="stats">📊 Statistik</button>
+      </div>
+
+      <!-- FILTER TAB -->
+      <div class="tab-panel active" id="tab-filter">
+        <div class="filter-section">
+          <div class="filter-label">📡 Operator</div>
+          <div class="chip-group" id="filter-operator">
+            <button class="chip op-tsel active" data-op="Telkomsel">Telkomsel</button>
+            <button class="chip op-isat active" data-op="Indosat">Indosat</button>
+            <button class="chip op-xl active"   data-op="XL Axiata">XL Axiata</button>
+            <button class="chip op-tri active"  data-op="Tri">Tri</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">📶 Tipe Jaringan</div>
+          <div class="chip-group" id="filter-jaringan">
+            <button class="chip net-2g active" data-net="2G">2G</button>
+            <button class="chip net-3g active" data-net="3G">3G</button>
+            <button class="chip net-4g active" data-net="4G">4G</button>
+            <button class="chip net-5g active" data-net="5G">5G</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">🏙️ Kabupaten/Kota</div>
+          <div class="chip-group" id="filter-kab">
+            <!-- filled by JS -->
+          </div>
+        </div>
+        <div style="padding: 10px 14px;">
+          <button class="filter-reset" id="btn-reset">↺ Reset Semua Filter</button>
+        </div>
+      </div>
+
+      <!-- LIST TAB -->
+      <div class="tab-panel" id="tab-list">
+        <div class="bts-count">Menampilkan <span id="list-count">25</span> BTS</div>
+        <div id="bts-list"></div>
+      </div>
+
+      <!-- STATS TAB -->
+      <div class="tab-panel" id="tab-stats">
+        <div class="stats-block">
+          <div class="big-stat">
+            <div class="big-stat-num" id="stat-total">25</div>
+            <div class="big-stat-lbl">Total BTS Ditampilkan</div>
+          </div>
+        </div>
+        <div class="stats-block">
+          <div class="stats-title">Per Operator</div>
+          <div id="stats-operator"></div>
+        </div>
+        <div class="stats-block">
+          <div class="stats-title">Per Jaringan</div>
+          <div id="stats-jaringan"></div>
+        </div>
+        <div class="stats-block">
+          <div class="stats-title">Per Kabupaten/Kota</div>
+          <div id="stats-kab"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+  </div>
+</div>
+
+<!-- Layer Control -->
+<div id="layer-control">
+  <div class="lc-title">🗺 Layer Peta</div>
+  <div class="lc-item">
+    <input type="radio" name="basemap" id="bm-osm" checked />
+    <label for="bm-osm">OpenStreetMap</label>
+  </div>
+  <div class="lc-item">
+    <input type="radio" name="basemap" id="bm-sat" />
+    <label for="bm-sat">Satelit</label>
+  </div>
+  <div class="lc-item">
+    <input type="radio" name="basemap" id="bm-dark" />
+    <label for="bm-dark">Dark Mode</label>
+  </div>
+  <hr style="border-color:rgba(255,255,255,0.08);margin:8px 0" />
+  <div class="lc-item">
+    <input type="checkbox" id="lyr-cluster" checked />
+    <label for="lyr-cluster">Clustering</label>
+  </div>
+  <div class="lc-item">
+    <input type="checkbox" id="lyr-heatmap" />
+    <label for="lyr-heatmap">Heatmap</label>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="leg-title">Legenda Operator</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FF0000"></div>Telkomsel</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FFB300"></div>Indosat</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#1565C0"></div>XL Axiata</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#7C4DFF"></div>Tri</div>
+</div>
+
+<!-- Info Bar -->
+<div id="info-bar">
+  <span>📍 Lat: <span id="cur-lat">—</span></span>
+  <span>Lng: <span id="cur-lng">—</span></span>
+  <span>🔍 Zoom: <span id="cur-zoom">8</span></span>
+  <span style="margin-left:auto">WebGIS BTS Riau • Kelompok: Tota · Dirra · Shalna · Ibas · Satrio · Mustopa</span>
+</div>
+
+<!-- Notification -->
+<div id="notif"></div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+
+<script>
+// ============================================================
+// DATA - BTS Riau (embedded untuk local mode)
+// ============================================================
+const BTS_DATA = [
+  {id:1,nama:"BTS-PKU-001",operator:"Telkomsel",jaringan:"4G",lat:0.5071,lng:101.4478,ketinggian:42,kab_kota:"Pekanbaru",kecamatan:"Sukajadi",status:"Aktif",tahun:2019},
+  {id:2,nama:"BTS-PKU-002",operator:"Indosat",jaringan:"4G",lat:0.4897,lng:101.3780,ketinggian:38,kab_kota:"Pekanbaru",kecamatan:"Tampan",status:"Aktif",tahun:2020},
+  {id:3,nama:"BTS-PKU-003",operator:"XL Axiata",jaringan:"4G",lat:0.5317,lng:101.4520,ketinggian:35,kab_kota:"Pekanbaru",kecamatan:"Rumbai",status:"Aktif",tahun:2021},
+  {id:4,nama:"BTS-PKU-004",operator:"Tri",jaringan:"3G",lat:0.4672,lng:101.4012,ketinggian:30,kab_kota:"Pekanbaru",kecamatan:"Bukit Raya",status:"Aktif",tahun:2018},
+  {id:5,nama:"BTS-PKU-005",operator:"Telkomsel",jaringan:"5G",lat:0.5200,lng:101.4600,ketinggian:50,kab_kota:"Pekanbaru",kecamatan:"Payung Sekaki",status:"Aktif",tahun:2023},
+  {id:6,nama:"BTS-DUM-001",operator:"Telkomsel",jaringan:"4G",lat:1.6667,lng:101.4500,ketinggian:40,kab_kota:"Dumai",kecamatan:"Dumai Kota",status:"Aktif",tahun:2019},
+  {id:7,nama:"BTS-DUM-002",operator:"Indosat",jaringan:"4G",lat:1.6800,lng:101.4200,ketinggian:36,kab_kota:"Dumai",kecamatan:"Dumai Selatan",status:"Aktif",tahun:2020},
+  {id:8,nama:"BTS-DUM-003",operator:"XL Axiata",jaringan:"3G",lat:1.6500,lng:101.4700,ketinggian:32,kab_kota:"Dumai",kecamatan:"Dumai Barat",status:"Aktif",tahun:2018},
+  {id:9,nama:"BTS-SEI-001",operator:"Telkomsel",jaringan:"4G",lat:1.0000,lng:102.0000,ketinggian:38,kab_kota:"Siak",kecamatan:"Siak",status:"Aktif",tahun:2020},
+  {id:10,nama:"BTS-SEI-002",operator:"Tri",jaringan:"3G",lat:1.0200,lng:101.9800,ketinggian:28,kab_kota:"Siak",kecamatan:"Tualang",status:"Aktif",tahun:2017},
+  {id:11,nama:"BTS-KMR-001",operator:"Telkomsel",jaringan:"4G",lat:0.8500,lng:101.4700,ketinggian:42,kab_kota:"Kampar",kecamatan:"Bangkinang",status:"Aktif",tahun:2019},
+  {id:12,nama:"BTS-KMR-002",operator:"Indosat",jaringan:"4G",lat:0.8200,lng:101.4900,ketinggian:38,kab_kota:"Kampar",kecamatan:"Kampar",status:"Aktif",tahun:2020},
+  {id:13,nama:"BTS-IHH-001",operator:"Telkomsel",jaringan:"4G",lat:0.3600,lng:101.4600,ketinggian:40,kab_kota:"Pelalawan",kecamatan:"Pangkalan Kerinci",status:"Aktif",tahun:2020},
+  {id:14,nama:"BTS-IHH-002",operator:"XL Axiata",jaringan:"3G",lat:0.3200,lng:101.4200,ketinggian:30,kab_kota:"Pelalawan",kecamatan:"Langgam",status:"Aktif",tahun:2018},
+  {id:15,nama:"BTS-IHH-003",operator:"Indosat",jaringan:"4G",lat:0.3900,lng:101.5000,ketinggian:36,kab_kota:"Pelalawan",kecamatan:"Ukui",status:"Aktif",tahun:2021},
+  {id:16,nama:"BTS-BKS-001",operator:"Telkomsel",jaringan:"4G",lat:0.4800,lng:102.0800,ketinggian:44,kab_kota:"Bengkalis",kecamatan:"Bengkalis",status:"Aktif",tahun:2019},
+  {id:17,nama:"BTS-BKS-002",operator:"Tri",jaringan:"2G",lat:0.4500,lng:102.1000,ketinggian:25,kab_kota:"Bengkalis",kecamatan:"Bantan",status:"Aktif",tahun:2016},
+  {id:18,nama:"BTS-IHH-004",operator:"Telkomsel",jaringan:"3G",lat:0.2500,lng:101.3500,ketinggian:35,kab_kota:"Indragiri Hulu",kecamatan:"Rengat",status:"Aktif",tahun:2018},
+  {id:19,nama:"BTS-KPR-001",operator:"Telkomsel",jaringan:"4G",lat:2.0167,lng:100.9333,ketinggian:40,kab_kota:"Rokan Hulu",kecamatan:"Pasir Pengaraian",status:"Aktif",tahun:2020},
+  {id:20,nama:"BTS-RHH-001",operator:"Indosat",jaringan:"4G",lat:2.3200,lng:101.0000,ketinggian:38,kab_kota:"Rokan Hilir",kecamatan:"Bagansiapiapi",status:"Aktif",tahun:2021},
+  {id:21,nama:"BTS-KPR-002",operator:"XL Axiata",jaringan:"4G",lat:2.0500,lng:100.9000,ketinggian:36,kab_kota:"Rokan Hulu",kecamatan:"Tambusai",status:"Aktif",tahun:2022},
+  {id:22,nama:"BTS-PKU-006",operator:"Telkomsel",jaringan:"5G",lat:0.4900,lng:101.4300,ketinggian:55,kab_kota:"Pekanbaru",kecamatan:"Marpoyan Damai",status:"Aktif",tahun:2023},
+  {id:23,nama:"BTS-MRG-001",operator:"Tri",jaringan:"3G",lat:0.4000,lng:102.5000,ketinggian:28,kab_kota:"Meranti",kecamatan:"Selatpanjang",status:"Aktif",tahun:2017},
+  {id:24,nama:"BTS-KWR-001",operator:"Telkomsel",jaringan:"4G",lat:0.0167,lng:101.0667,ketinggian:38,kab_kota:"Kuantan Singingi",kecamatan:"Teluk Kuantan",status:"Aktif",tahun:2019},
+  {id:25,nama:"BTS-IHL-001",operator:"Indosat",jaringan:"3G",lat:-0.3500,lng:102.5667,ketinggian:32,kab_kota:"Indragiri Hilir",kecamatan:"Tembilahan",status:"Aktif",tahun:2018}
+];
+
+// ============================================================
+// CONFIG
+// ============================================================
+const OP_COLOR = {
+  'Telkomsel': '#FF0000',
+  'Indosat':   '#FFB300',
+  'XL Axiata': '#1565C0',
+  'Tri':       '#7C4DFF',
+};
+const NET_COLOR = {
+  '2G': '#546E7A',
+  '3G': '#00796B',
+  '4G': '#0097A7',
+  '5G': '#00C853',
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let activeOps  = new Set(['Telkomsel','Indosat','XL Axiata','Tri']);
+let activeNets = new Set(['2G','3G','4G','5G']);
+let activeKabs = new Set();
+let searchQ    = '';
+let selectedId = null;
+let clusterMode = true;
+
+// ============================================================
+// MAP INIT
+// ============================================================
+const map = L.map('map', {
+  center: [0.8, 101.5],
+  zoom: 8,
+  zoomControl: true,
+});
+map.zoomControl.setPosition('bottomright');
+
+const basemaps = {
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
+  sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }),
+};
+basemaps.osm.addTo(map);
+
+// Basemap toggle
+document.querySelectorAll('input[name=basemap]').forEach(r => {
+  r.addEventListener('change', () => {
+    Object.values(basemaps).forEach(b => map.removeLayer(b));
+    if (r.id === 'bm-osm')  basemaps.osm.addTo(map);
+    if (r.id === 'bm-sat')  basemaps.sat.addTo(map);
+    if (r.id === 'bm-dark') basemaps.dark.addTo(map);
+  });
+});
+
+// Cursor coords
+map.on('mousemove', e => {
+  document.getElementById('cur-lat').textContent = e.latlng.lat.toFixed(5);
+  document.getElementById('cur-lng').textContent = e.latlng.lng.toFixed(5);
+});
+map.on('zoomend', () => {
+  document.getElementById('cur-zoom').textContent = map.getZoom();
+});
+
+// ============================================================
+// MARKER LAYERS
+// ============================================================
+let clusterGroup = L.markerClusterGroup({ chunkedLoading: true });
+let plainGroup   = L.layerGroup();
+let heatLayer    = null;
+let markerMap    = {}; // id -> marker
+
+map.addLayer(clusterGroup);
+
+function makeIcon(op) {
+  const color = OP_COLOR[op] || '#aaa';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <ellipse cx="14" cy="33" rx="6" ry="2.5" fill="rgba(0,0,0,0.25)"/>
+    <path d="M14 2 C7.4 2 2 7.4 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.4 20.6 2 14 2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="5" fill="white" opacity="0.9"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg, className: '', iconSize: [28,36], iconAnchor: [14,34], popupAnchor: [0,-34]
+  });
+}
+
+function buildPopup(d) {
+  return `<div class="popup-wrap">
+    <div class="popup-header">
+      <div class="popup-icon">📡</div>
+      <div>
+        <div class="popup-name">${d.nama}</div>
+        <div class="popup-op" style="color:${OP_COLOR[d.operator]}">${d.operator}</div>
+      </div>
+    </div>
+    <div class="popup-grid">
+      <div class="popup-field"><div class="popup-field-lbl">Jaringan</div><div class="popup-field-val" style="color:${NET_COLOR[d.jaringan]}">${d.jaringan}</div></div>
+      <div class="popup-field"><div class="popup-field-lbl">Ketinggian</div><div class="popup-field-val">${d.ketinggian} m</div></div>
+      <div class="popup-field"><div class="popup-field-lbl">Wilayah</div><div class="popup-field-val">${d.kab_kota}</div></div>
+      <div class="popup-field"><div class="popup-field-lbl">Tahun Op.</div><div class="popup-field-val">${d.tahun}</div></div>
+      <div class="popup-field" style="grid-column:span 2"><div class="popup-field-lbl">Kecamatan</div><div class="popup-field-val">${d.kecamatan}</div></div>
+    </div>
+    <div><span class="popup-status">✓ ${d.status}</span></div>
+  </div>`;
+}
+
+// ============================================================
+// FILTER & RENDER
+// ============================================================
+function getFiltered() {
+  const q = searchQ.toLowerCase();
+  return BTS_DATA.filter(d =>
+    activeOps.has(d.operator) &&
+    activeNets.has(d.jaringan) &&
+    (activeKabs.size === 0 || activeKabs.has(d.kab_kota)) &&
+    (q === '' || d.nama.toLowerCase().includes(q) || d.kab_kota.toLowerCase().includes(q) || d.kecamatan.toLowerCase().includes(q))
+  );
+}
+
+function renderMap() {
+  clusterGroup.clearLayers();
+  plainGroup.clearLayers();
+  markerMap = {};
+
+  const filtered = getFiltered();
+
+  filtered.forEach(d => {
+    const m = L.marker([d.lat, d.lng], { icon: makeIcon(d.operator) })
+      .bindPopup(buildPopup(d), { maxWidth: 280 });
+    m.on('click', () => selectBTS(d.id));
+    markerMap[d.id] = m;
+    if (clusterMode) clusterGroup.addLayer(m);
+    else plainGroup.addLayer(m);
+  });
+
+  if (!clusterMode && !map.hasLayer(plainGroup)) map.addLayer(plainGroup);
+
+  document.getElementById('hs-showing').textContent = filtered.length;
+  document.getElementById('list-count').textContent  = filtered.length;
+  document.getElementById('stat-total').textContent  = filtered.length;
+
+  renderList(filtered);
+  renderStats(filtered);
+  renderHeatmap(filtered);
+}
+
+function renderList(filtered) {
+  const list = document.getElementById('bts-list');
+  list.innerHTML = filtered.map(d => `
+    <div class="bts-item${selectedId===d.id?' selected':''}" data-id="${d.id}">
+      <div class="bts-dot" style="background:${OP_COLOR[d.operator]}"></div>
+      <div class="bts-info">
+        <div class="bts-name">${d.nama}</div>
+        <div class="bts-meta">${d.kab_kota} · ${d.kecamatan}</div>
+      </div>
+      <div class="bts-badge" style="background:${NET_COLOR[d.jaringan]}">${d.jaringan}</div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.bts-item').forEach(el => {
+    el.addEventListener('click', () => selectBTS(+el.dataset.id));
+  });
+}
+
+function renderStats(filtered) {
+  // Operator
+  const opCount = {};
+  filtered.forEach(d => opCount[d.operator] = (opCount[d.operator]||0)+1);
+  const maxOp = Math.max(...Object.values(opCount), 1);
+  document.getElementById('stats-operator').innerHTML = Object.entries(opCount)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([op, cnt]) => `
+      <div class="stat-row">
+        <div class="stat-row-label">${op}</div>
+        <div class="stat-bar-wrap"><div class="stat-bar" style="width:${(cnt/maxOp*100).toFixed(0)}%;background:${OP_COLOR[op]}"></div></div>
+        <div class="stat-row-val">${cnt}</div>
+      </div>`).join('');
+
+  // Jaringan
+  const netCount = {};
+  filtered.forEach(d => netCount[d.jaringan] = (netCount[d.jaringan]||0)+1);
+  const maxNet = Math.max(...Object.values(netCount), 1);
+  document.getElementById('stats-jaringan').innerHTML = ['5G','4G','3G','2G']
+    .filter(n => netCount[n])
+    .map(n => `
+      <div class="stat-row">
+        <div class="stat-row-label">${n}</div>
+        <div class="stat-bar-wrap"><div class="stat-bar" style="width:${((netCount[n]||0)/maxNet*100).toFixed(0)}%;background:${NET_COLOR[n]}"></div></div>
+        <div class="stat-row-val">${netCount[n]||0}</div>
+      </div>`).join('');
+
+  // Kab
+  const kabCount = {};
+  filtered.forEach(d => kabCount[d.kab_kota] = (kabCount[d.kab_kota]||0)+1);
+  const maxKab = Math.max(...Object.values(kabCount), 1);
+  document.getElementById('stats-kab').innerHTML = Object.entries(kabCount)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([k,c]) => `
+      <div class="stat-row">
+        <div class="stat-row-label" style="font-size:10px">${k}</div>
+        <div class="stat-bar-wrap"><div class="stat-bar" style="width:${(c/maxKab*100).toFixed(0)}%;background:var(--cyan)"></div></div>
+        <div class="stat-row-val">${c}</div>
+      </div>`).join('');
+}
+
+function renderHeatmap(filtered) {
+  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+  if (!document.getElementById('lyr-heatmap').checked) return;
+  // Simple circle heatmap using Leaflet circles
+  heatLayer = L.layerGroup(filtered.map(d =>
+    L.circle([d.lat, d.lng], {
+      radius: 15000, color: 'transparent',
+      fillColor: OP_COLOR[d.operator] || '#0097A7',
+      fillOpacity: 0.12,
+    })
+  ));
+  map.addLayer(heatLayer);
+}
+
+// ============================================================
+// SELECT BTS
+// ============================================================
+function selectBTS(id) {
+  selectedId = id;
+  const d = BTS_DATA.find(x => x.id === id);
+  if (!d) return;
+
+  // Switch to list tab
+  switchTab('list');
+
+  // Fly to marker
+  map.flyTo([d.lat, d.lng], 13, { duration: 1.2 });
+
+  setTimeout(() => {
+    const m = markerMap[id];
+    if (m) {
+      if (clusterMode) clusterGroup.zoomToShowLayer(m, () => m.openPopup());
+      else m.openPopup();
+    }
+  }, 1300);
+
+  // Highlight list
+  renderList(getFiltered());
+}
+
+// ============================================================
+// INIT KABS FILTER
+// ============================================================
+function initKabFilter() {
+  const kabs = [...new Set(BTS_DATA.map(d => d.kab_kota))].sort();
+  const wrap = document.getElementById('filter-kab');
+  wrap.innerHTML = kabs.map(k => `
+    <button class="chip" data-kab="${k}">${k}</button>
+  `).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.kab;
+      if (activeKabs.has(k)) { activeKabs.delete(k); btn.classList.remove('active'); }
+      else { activeKabs.add(k); btn.classList.add('active'); }
+      renderMap();
+    });
+  });
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.stab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-'+name));
+}
+document.querySelectorAll('.stab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+// ============================================================
+// FILTER CHIPS
+// ============================================================
+document.querySelectorAll('#filter-operator .chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const op = btn.dataset.op;
+    if (activeOps.has(op)) { activeOps.delete(op); btn.classList.remove('active'); }
+    else { activeOps.add(op); btn.classList.add('active'); }
+    renderMap();
+  });
+});
+
+document.querySelectorAll('#filter-jaringan .chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const net = btn.dataset.net;
+    if (activeNets.has(net)) { activeNets.delete(net); btn.classList.remove('active'); }
+    else { activeNets.add(net); btn.classList.add('active'); }
+    renderMap();
+  });
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  activeOps  = new Set(['Telkomsel','Indosat','XL Axiata','Tri']);
+  activeNets = new Set(['2G','3G','4G','5G']);
+  activeKabs.clear();
+  searchQ = '';
+  document.getElementById('search-input').value = '';
+  document.querySelectorAll('#filter-operator .chip, #filter-jaringan .chip').forEach(c => c.classList.add('active'));
+  document.querySelectorAll('#filter-kab .chip').forEach(c => c.classList.remove('active'));
+  renderMap();
+  showNotif('Filter direset ✓');
+});
+
+// ============================================================
+// SEARCH
+// ============================================================
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQ = e.target.value;
+  renderMap();
+});
+
+// ============================================================
+// LAYER CONTROLS
+// ============================================================
+document.getElementById('lyr-cluster').addEventListener('change', e => {
+  clusterMode = e.target.checked;
+  if (clusterMode) {
+    map.removeLayer(plainGroup);
+    map.addLayer(clusterGroup);
+  } else {
+    map.removeLayer(clusterGroup);
+    map.addLayer(plainGroup);
+  }
+  renderMap();
+});
+
+document.getElementById('lyr-heatmap').addEventListener('change', () => {
+  renderHeatmap(getFiltered());
+});
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+function showNotif(msg) {
+  const el = document.getElementById('notif');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2000);
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+window.addEventListener('load', () => {
+  initKabFilter();
+  renderMap();
+
+  setTimeout(() => {
+    const loading = document.getElementById('loading');
+    loading.style.opacity = '0';
+    setTimeout(() => loading.style.display = 'none', 400);
+  }, 1800);
+});
+</script>
+</body>
+</html>
